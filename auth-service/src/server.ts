@@ -9,4 +9,5 @@ const startApp = async () => {
     console.log(`App is listening on Port ${PORT}`);
   });
 };
-+startApp();
+
+startApp();
