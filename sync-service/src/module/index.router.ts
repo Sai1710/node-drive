@@ -1,6 +1,4 @@
 import { Router } from "express";
-import authRoutes from "./auth/auth.router";
-import { AUTH_ROUTE } from "./auth/auth.constants";
 
 class IndexRouter {
   router: Router;
@@ -10,9 +8,7 @@ class IndexRouter {
     this.setupRoutes();
   }
 
-  private setupRoutes() {
-    this.router.use(AUTH_ROUTE, authRoutes);
-  }
+  private setupRoutes() {}
 }
 
 export default new IndexRouter().router;

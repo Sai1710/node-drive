@@ -1,6 +1,6 @@
 import { Router } from "express";
-import authRoutes from "./auth/auth.router";
-import { AUTH_ROUTE } from "./auth/auth.constants";
+import { FILE_ROUTE } from "./file/file.constants";
+import fileRouter from "./file/file.router";
 
 class IndexRouter {
   router: Router;
@@ -11,7 +11,7 @@ class IndexRouter {
   }
 
   private setupRoutes() {
-    this.router.use(AUTH_ROUTE, authRoutes);
+    this.router.use(FILE_ROUTE, fileRouter);
   }
 }
 

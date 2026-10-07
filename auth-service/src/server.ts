@@ -2,7 +2,7 @@ import appConfiguration from "./config/app.configuration";
 import { PORT } from "./config/env.configuration";
 import { connectToDB } from "./database/connection/dbConnect";
 
-const startApp = async () => {
+const startApp = () => {
   const app = appConfiguration.app;
   connectToDB();
   app.listen(PORT, () => {
