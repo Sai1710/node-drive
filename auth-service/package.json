@@ -22,6 +22,7 @@
     "typescript-eslint": "^8.70.0"
   },
   "dependencies": {
+    "@sakiriti/drive-common": "^1.0.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.1",

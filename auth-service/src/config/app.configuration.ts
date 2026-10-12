@@ -1,7 +1,7 @@
 import express, { Router } from "express";
 import cors from "cors";
 import indexRouter from "../module/index.router";
-import { errorHandler } from "../utils/errorHandler";
+import { errorHandler } from "@sakiriti/drive-common";
 
 class App {
   app: express.Express;
@@ -15,7 +15,7 @@ class App {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cors());
-    this.app.use(errorHandler)
+    this.app.use(errorHandler);
 
     this.app.use(indexRouter);
   }

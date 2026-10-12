@@ -1,18 +1,13 @@
 import { NextFunction, Request, Response } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
-import { asyncHandler } from "../../utils/asyncHandler";
 import { ACCESS_TOKEN_SECRET } from "../../config/env.configuration";
-import { ApiError } from "../../utils/ApiError";
-import userModel from "../../database/models/user.model";
+import { ApiError, asyncHandler, TUserDocument } from "@sakiriti/drive-common";
 
 class AuthMiddleware {
   validateToken = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-      const accessToken = req.headers["Authorization"]?.[0]?.replace(
-        "Bearer ",
-        "",
-      );
+      const accessToken = req.headers["authorization"]?.replace("Bearer ", "");
       if (!accessToken) {
         throw new ApiError(401, "Invalid access token");
       }
@@ -23,18 +18,12 @@ class AuthMiddleware {
 
       const decodedUser = jwt.verify(
         accessToken,
-        ACCESS_TOKEN_SECRET,
+        ACCESS_TOKEN_SECRET
       ) as JwtPayload;
 
-      const user = await userModel.findById(decodedUser._id);
-
-      if (!user) {
-        throw new ApiError(401, "Invalid access token");
-      }
-
-      req.user = user;
+      req.user = decodedUser as TUserDocument;
       next();
-    },
+    }
   );
 }
 

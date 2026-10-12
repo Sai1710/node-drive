@@ -1,6 +1,12 @@
 import { Router } from "express";
 import fileController from "./file.controller";
-import { BASE_ROUTE, GET_FILE_ROUTE } from "./file.constants";
+import {
+  BASE_ROUTE,
+  GET_FILE_PREVIEW_ROUTE,
+  GET_FILE_ROUTE,
+  UPLOAD_ROUTE,
+} from "./file.constants";
+import fileMiddleware from "./file.middleware";
 
 class FileRouter {
   router: Router;
@@ -11,9 +17,26 @@ class FileRouter {
   }
 
   private setupRoutes() {
-    this.router.get(BASE_ROUTE, fileController.getAllFiles);
-    this.router.post(BASE_ROUTE, fileController.uploadFile);
-    this.router.get(GET_FILE_ROUTE, fileController.getFile);
+    this.router.get(
+      BASE_ROUTE,
+      fileMiddleware.validateToken,
+      fileController.getAllFiles
+    );
+    this.router.post(
+      UPLOAD_ROUTE,
+      fileMiddleware.validateToken,
+      fileController.uploadFile
+    );
+    this.router.get(
+      GET_FILE_PREVIEW_ROUTE,
+      fileMiddleware.validateToken,
+      fileController.getFilePreview
+    );
+    this.router.get(
+      GET_FILE_ROUTE,
+      fileMiddleware.validateToken,
+      fileController.getFileData
+    );
   }
 }
 

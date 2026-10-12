@@ -1,15 +1,17 @@
 import { Request, Response } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
-import { ApiError } from "../../utils/ApiError";
-import { asyncHandler } from "../../utils/asyncHandler";
-import { ApiResponse } from "../../utils/ApiResponse";
-import userModel from "../../database/models/user.model";
-import { TUserDocument } from "../../types/user.types";
 import {
   ACCESS_TOKEN_SECRET,
   REFRESH_TOKEN_SECRET,
 } from "../../config/env.configuration";
+import {
+  ApiError,
+  ApiResponse,
+  asyncHandler,
+  TUserDocument,
+  userModel,
+} from "@sakiriti/drive-common";
 
 class AuthControllers {
   signup = asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -47,12 +49,11 @@ class AuthControllers {
     const existingUser: TUserDocument | null = await userModel.findOne({
       email,
     });
-
     if (!existingUser?._id) {
       throw new ApiError(401, "No user exists with this email");
     }
 
-    const doesPasswordMatch = existingUser.comparePassword(password);
+    const doesPasswordMatch = await existingUser.comparePassword(password);
 
     if (!doesPasswordMatch) {
       throw new ApiError(401, "Invalid Password");
@@ -66,14 +67,17 @@ class AuthControllers {
       existingUser.generateRefreshToken(REFRESH_TOKEN_SECRET);
     const accessToken = existingUser.generateAccessToken(ACCESS_TOKEN_SECRET);
 
+    existingUser.refresh_token = refreshToken;
+    await existingUser.save();
+
     res
       .status(200)
       .json(
         new ApiResponse(
           200,
           { access_token: accessToken, refresh_token: refreshToken },
-          "Login successful",
-        ),
+          "Login successful"
+        )
       );
   });
 
@@ -89,7 +93,7 @@ class AuthControllers {
 
       const decodedUser = jwt.verify(
         refresh_token,
-        REFRESH_TOKEN_SECRET,
+        REFRESH_TOKEN_SECRET
       ) as JwtPayload;
 
       if (!decodedUser?._id) {
@@ -106,7 +110,7 @@ class AuthControllers {
       const accessToken = user?.generateAccessToken(ACCESS_TOKEN_SECRET);
 
       res.status(200).json(new ApiResponse(200, { access_token: accessToken }));
-    },
+    }
   );
 
   logout = asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -117,7 +121,7 @@ class AuthControllers {
           refresh_token: null,
         },
       },
-      { new: true },
+      { new: true }
     );
     res.status(200).json(new ApiResponse(200, {}, "Logged out successfully"));
   });
