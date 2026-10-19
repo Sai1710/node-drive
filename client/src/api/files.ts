@@ -65,33 +65,65 @@ export async function getFilePreviewUrl(id: string): Promise<string> {
   return data.presigned_url;
 }
 
-/** Creates the file record and returns a presigned S3 PUT URL (POST /file/upload, valid 1 hour). */
-export function requestUploadUrl(file: File) {
-  return request<{ presigned_url: string }>(`${FILE_API_URL}/file/upload`, {
-    method: "POST",
-    auth: true,
-    body: {
-      file_name: file.name,
-      content_type: contentTypeOf(file),
-      size: file.size,
-    },
-  });
+export type UploadType = "SINGLE" | "MULTI";
+
+/** Presigned part URLs from POST /file/upload/initialize (valid 1 hour). */
+export interface InitializeUploadData {
+  file_id: string;
+  upload_urls: string[];
+  upload_type: UploadType;
+  upload_id: string | null;
 }
 
-/**
- * PUTs the file straight to S3. Uses XHR because fetch has no upload progress.
- * The Content-Type must match the one the URL was signed with.
- */
-export function uploadToS3(
+export interface UploadPart {
+  part_number: number;
+  etag: string;
+}
+
+/** Finalizes a multipart upload after all parts are on S3. */
+export function completeUpload(
+  fileId: string,
+  uploadId: string,
+  parts: UploadPart[]
+) {
+  return request<ServerFile>(
+    `${FILE_API_URL}/file/upload/complete/${encodeURIComponent(fileId)}`,
+    {
+      method: "POST",
+      auth: true,
+      body: { upload_id: uploadId, parts },
+    }
+  );
+}
+
+/** Creates the file record and returns presigned S3 upload URL(s). */
+export function initializeUpload(file: File) {
+  return request<InitializeUploadData>(
+    `${FILE_API_URL}/file/upload/initialize`,
+    {
+      method: "POST",
+      auth: true,
+      body: {
+        file_name: file.name,
+        mime_type: contentTypeOf(file),
+        size: file.size,
+      },
+    }
+  );
+}
+
+/** XHR PUT to a presigned URL (fetch has no upload progress). */
+function putBlobToS3(
   url: string,
-  file: File,
+  body: Blob,
+  contentType: string | null,
   onProgress: (percent: number) => void,
   signal?: AbortSignal
-): Promise<void> {
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentTypeOf(file));
+    if (contentType) xhr.setRequestHeader("Content-Type", contentType);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable)
@@ -100,7 +132,17 @@ export function uploadToS3(
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress(100);
-        resolve();
+        const etag = xhr.getResponseHeader("ETag");
+        if (!etag) {
+          reject(
+            new HttpError(
+              0,
+              "Storage did not return an ETag. Add ETag to the bucket CORS ExposeHeaders."
+            )
+          );
+          return;
+        }
+        resolve(etag);
       } else {
         reject(
           new HttpError(
@@ -124,8 +166,56 @@ export function uploadToS3(
       if (signal.aborted) return xhr.abort();
       signal.addEventListener("abort", () => xhr.abort(), { once: true });
     }
-    xhr.send(file);
+    xhr.send(body);
   });
+}
+
+/** PUTs the file straight to S3. Content-Type must match what the URL was signed with. */
+export function uploadToS3(
+  url: string,
+  file: File,
+  onProgress: (percent: number) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  return putBlobToS3(url, file, contentTypeOf(file), onProgress, signal).then(
+    () => undefined
+  );
+}
+
+async function uploadMultipartToS3(
+  file: File,
+  uploadUrls: string[],
+  onProgress: (percent: number) => void,
+  signal?: AbortSignal
+): Promise<UploadPart[]> {
+  const total = file.size;
+  let uploadedBytes = 0;
+  const chunkSize = Math.ceil(total / uploadUrls.length);
+  const parts: UploadPart[] = [];
+
+  for (let i = 0; i < uploadUrls.length; i++) {
+    signal?.throwIfAborted();
+    const start = i * chunkSize;
+    const chunk = file.slice(start, Math.min(start + chunkSize, total));
+    const partStart = uploadedBytes;
+
+    const etag = await putBlobToS3(
+      uploadUrls[i],
+      chunk,
+      null,
+      (partPercent) => {
+        const partLoaded = (partPercent / 100) * chunk.size;
+        onProgress(Math.round(((partStart + partLoaded) / total) * 100));
+      },
+      signal
+    );
+
+    parts.push({ part_number: i + 1, etag });
+    uploadedBytes += chunk.size;
+    onProgress(Math.round((uploadedBytes / total) * 100));
+  }
+
+  return parts;
 }
 
 export async function uploadFile(
@@ -133,7 +223,25 @@ export async function uploadFile(
   onProgress: (percent: number) => void,
   signal?: AbortSignal
 ) {
-  const { presigned_url } = await requestUploadUrl(file);
+  const init = await initializeUpload(file);
   signal?.throwIfAborted();
-  await uploadToS3(presigned_url, file, onProgress, signal);
+
+  if (init.upload_type === "MULTI") {
+    if (!init.upload_id) {
+      throw new HttpError(500, "Multipart upload could not be started.");
+    }
+    const parts = await uploadMultipartToS3(
+      file,
+      init.upload_urls,
+      onProgress,
+      signal
+    );
+    signal?.throwIfAborted();
+    await completeUpload(init.file_id, init.upload_id, parts);
+    return;
+  }
+
+  const url = init.upload_urls[0];
+  if (!url) throw new HttpError(500, "Upload could not be started.");
+  await uploadToS3(url, file, onProgress, signal);
 }
