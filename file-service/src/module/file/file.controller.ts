@@ -2,10 +2,10 @@ import { Request, Response } from "express";
 import {
   CompleteMultipartUploadCommand,
   GetObjectCommand,
-  PutObjectCommand,
+  S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import s3Client from "../../config/aws.configuration";
+import awsClient from "../../config/aws.configuration";
 import { AWS_BUCKET } from "../../config/env.configuration";
 import {
   ApiError,
@@ -17,50 +17,53 @@ import mongoose from "mongoose";
 import FileService from "./file.service";
 
 class FileController {
-  static initializeUpload = asyncHandler(
-    async (req: Request, res: Response) => {
-      const userId = req.user?._id;
-      const { file_name, mime_type, size } = req.body;
+  s3Client: S3Client;
 
-      if (!file_name || !size || !mime_type) {
-        throw new ApiError(400, "Invalid request");
-      }
+  constructor() {
+    this.s3Client = awsClient.s3Client;
+  }
 
-      const mbSize = size / 1_000_000;
-      const isMultiPartUpload = mbSize > 10;
+  initializeUpload = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const { file_name, mime_type, size } = req.body;
 
-      const createdFile = await fileModel.create({
-        file_name,
-        user_id: userId,
-        size,
-        mime_type,
-      });
-
-      const uploadUrls = isMultiPartUpload
-        ? await FileService.generateMultiPartUploadData(createdFile)
-        : await FileService.generateSinglePartUploadData(createdFile);
-
-      if (uploadUrls.upload_id) {
-        await fileModel.findByIdAndUpdate(createdFile._id, {
-          upload_id: uploadUrls.upload_id,
-        });
-      }
-
-      const fileResponse = {
-        file_id: createdFile._id.toString(),
-        upload_urls: uploadUrls.upload_urls,
-        upload_type: isMultiPartUpload ? "MULTI" : "SINGLE",
-        upload_id: uploadUrls.upload_id,
-      };
-      res
-        .status(200)
-        .json(new ApiResponse(200, fileResponse, "Initialized upload"));
+    if (!file_name || !size || !mime_type) {
+      throw new ApiError(400, "Invalid request");
     }
-  );
 
-  static completeUpload = asyncHandler(async (req: Request, res: Response) => {
+    const mbSize = size / 1_000_000;
+    const isMultiPartUpload = mbSize > 10;
+
+    const createdFile = await fileModel.create({
+      file_name,
+      user_id: userId,
+      size,
+      mime_type,
+    });
+
+    const uploadUrls = isMultiPartUpload
+      ? await FileService.generateMultiPartUploadData(createdFile)
+      : await FileService.generateSinglePartUploadData(createdFile);
+
+    if (uploadUrls.upload_id) {
+      createdFile.upload_id = uploadUrls.upload_id;
+      await createdFile.save();
+    }
+
+    const fileResponse = {
+      file_id: createdFile._id.toString(),
+      upload_urls: uploadUrls.upload_urls,
+      upload_type: isMultiPartUpload ? "MULTI" : "SINGLE",
+      upload_id: uploadUrls.upload_id,
+    };
+    res
+      .status(200)
+      .json(new ApiResponse(200, fileResponse, "Initialized upload"));
+  });
+
+  completeUpload = asyncHandler(async (req: Request, res: Response) => {
     const { file_id } = req.params;
-    const { parts, upload_id: bodyUploadId } = req.body;
+    const { parts } = req.body;
 
     if (!Array.isArray(parts) || parts.length === 0) {
       throw new ApiError(400, "Invalid request");
@@ -71,8 +74,7 @@ class FileController {
       throw new ApiError(404, "No file found");
     }
 
-    const uploadId =
-      (fileObj as { upload_id?: string }).upload_id ?? bodyUploadId;
+    const uploadId = fileObj.upload_id;
     if (!uploadId) {
       throw new ApiError(400, "Missing upload id");
     }
@@ -94,7 +96,7 @@ class FileController {
       },
     });
 
-    await s3Client.send(completeUploadCommand);
+    await this.s3Client.send(completeUploadCommand);
 
     const updated = await fileModel.findByIdAndUpdate(
       file_id,
@@ -105,7 +107,7 @@ class FileController {
     res.status(200).json(new ApiResponse(200, updated, "Upload complete"));
   });
 
-  static getAllFiles = asyncHandler(async (req: Request, res: Response) => {
+  getAllFiles = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id;
 
     const userFiles = await fileModel
@@ -117,18 +119,18 @@ class FileController {
     res.status(200).json(new ApiResponse(200, { files: userFiles }));
   });
 
-  static getFilePreview = asyncHandler(async (req: Request, res: Response) => {
+  getFilePreview = asyncHandler(async (req: Request, res: Response) => {
     const s3Key = req.params?.id.toString();
     const getCommand = new GetObjectCommand({
       Bucket: AWS_BUCKET,
       Key: s3Key,
     });
 
-    const url = await getSignedUrl(s3Client, getCommand);
+    const url = await getSignedUrl(this.s3Client, getCommand);
     res.status(200).json(new ApiResponse(200, { presigned_url: url }));
   });
 
-  static getFileData = asyncHandler(async (req: Request, res: Response) => {
+  getFileData = asyncHandler(async (req: Request, res: Response) => {
     const fileId = req.params?.id.toString();
     const fileData = await fileModel.findById(fileId);
     if (!fileData?._id) {
@@ -136,6 +138,26 @@ class FileController {
     }
     res.status(200).json(new ApiResponse(200, fileData, "File data fetched"));
   });
+
+  renameFile = asyncHandler(async (req: Request, res: Response) => {
+    const { file_name } = req.body;
+    const { id } = req.params;
+
+    await fileModel.findByIdAndUpdate(id, {
+      file_name,
+    });
+
+    res.status(200).json(new ApiResponse(200, {}, "Filename updated"));
+  });
+
+  deleteFile = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    await fileModel.findByIdAndUpdate(id, {
+      is_trashed: true,
+    });
+
+    res.status(200).json(new ApiResponse(200, {}, "File deleted successfully"));
+  });
 }
 
-export default FileController;
+export default new FileController();

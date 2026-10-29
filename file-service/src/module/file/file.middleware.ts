@@ -4,10 +4,9 @@ import { ACCESS_TOKEN_SECRET } from "../../config/env.configuration";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
 class FileMiddleware {
-  validateToken = asyncHandler(
+  static validateToken = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
       const accessToken = req.headers["authorization"]?.replace("Bearer ", "");
-      console.log(req.headers, { accessToken });
       if (!accessToken) {
         throw new ApiError(401, "Invalid access token");
       }
@@ -27,4 +26,4 @@ class FileMiddleware {
   );
 }
 
-export default new FileMiddleware();
+export default FileMiddleware;

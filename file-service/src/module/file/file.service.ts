@@ -6,39 +6,43 @@ import {
 import { TFileDocument } from "@sakiriti/drive-common";
 import { AWS_BUCKET } from "../../config/env.configuration";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import s3Client from "../../config/aws.configuration";
+import awsConfiguration from "../../config/aws.configuration";
 
 class FileService {
-  static async generateSinglePartUploadData(fileReq: TFileDocument) {
+  s3Client = awsConfiguration.s3Client;
+
+  async generateSinglePartUploadData(fileReq: TFileDocument) {
     const putCommand = new PutObjectCommand({
       Bucket: AWS_BUCKET,
       Key: fileReq._id.toString(),
-      ContentType: fileReq.mime_type,
+      ContentType: fileReq.mime_type || "",
     });
 
-    const preSignedUrl = await getSignedUrl(s3Client, putCommand, {
+    const preSignedUrl = await getSignedUrl(this.s3Client, putCommand, {
       expiresIn: 3600,
     });
 
     return { upload_id: null, upload_urls: [preSignedUrl] };
   }
 
-  static async generateMultiPartUploadData(fileReq: TFileDocument) {
+  async generateMultiPartUploadData(fileReq: TFileDocument) {
     const createMultipartCommand = new CreateMultipartUploadCommand({
       Bucket: AWS_BUCKET,
       Key: fileReq._id.toString(),
-      ContentType: fileReq.mime_type,
+      ContentType: fileReq.mime_type || "",
     });
 
-    const mbSize = fileReq.size / 100_00_00;
-    const noOfParts = Math.ceil(mbSize / 10) ;
+    const mbSize = fileReq.size / 1_000_000;
+    const noOfParts = Math.ceil(mbSize / 10);
 
-    const startUploadResponse = await s3Client.send(createMultipartCommand);
+    const startUploadResponse = await this.s3Client.send(
+      createMultipartCommand
+    );
     let preSignedUrls = [];
 
     for (let i = 0; i < noOfParts; i++) {
       const url = await getSignedUrl(
-        s3Client,
+        this.s3Client,
         new UploadPartCommand({
           Bucket: AWS_BUCKET,
           Key: fileReq._id.toString(),
@@ -55,7 +59,5 @@ class FileService {
       upload_urls: preSignedUrls,
     };
   }
-
-  static buildInitializeUploadResponse() {}
 }
-export default FileService;
+export default new FileService();

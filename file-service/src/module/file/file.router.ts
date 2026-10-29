@@ -1,15 +1,14 @@
 import { Router } from "express";
-import fileController from "./file.controller";
 import {
   COMPLETE_UPLOAD_ROUTE,
   GET_FILE_PREVIEW_ROUTE,
   GET_FILE_ROUTE,
+  RENAME_FILE_ROUTE,
   ROOT,
   UPLOAD_INITIALIZE_ROUTE,
-  UPLOAD_ROUTE,
 } from "./file.constants";
-import fileMiddleware from "./file.middleware";
-import FileController from "./file.controller";
+import fileController from "./file.controller";
+import FileMiddleware from "./file.middleware";
 
 class FileRouter {
   router: Router;
@@ -22,28 +21,38 @@ class FileRouter {
   private setupRoutes() {
     this.router.post(
       UPLOAD_INITIALIZE_ROUTE,
-      fileMiddleware.validateToken,
-      FileController.initializeUpload
+      FileMiddleware.validateToken,
+      fileController.initializeUpload
     );
     this.router.get(
       ROOT,
-      fileMiddleware.validateToken,
-      FileController.getAllFiles
+      FileMiddleware.validateToken,
+      fileController.getAllFiles
     );
     this.router.post(
       COMPLETE_UPLOAD_ROUTE,
-      fileMiddleware.validateToken,
-      FileController.completeUpload
+      FileMiddleware.validateToken,
+      fileController.completeUpload
     );
     this.router.get(
       GET_FILE_PREVIEW_ROUTE,
-      fileMiddleware.validateToken,
-      FileController.getFilePreview
+      FileMiddleware.validateToken,
+      fileController.getFilePreview
+    );
+    this.router.put(
+      RENAME_FILE_ROUTE,
+      FileMiddleware.validateToken,
+      fileController.renameFile
     );
     this.router.get(
       GET_FILE_ROUTE,
-      fileMiddleware.validateToken,
-      FileController.getFileData
+      FileMiddleware.validateToken,
+      fileController.getFileData
+    );
+    this.router.delete(
+      GET_FILE_ROUTE,
+      FileMiddleware.validateToken,
+      fileController.deleteFile
     );
   }
 }

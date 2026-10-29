@@ -83,7 +83,6 @@ export interface UploadPart {
 /** Finalizes a multipart upload after all parts are on S3. */
 export function completeUpload(
   fileId: string,
-  uploadId: string,
   parts: UploadPart[]
 ) {
   return request<ServerFile>(
@@ -91,7 +90,7 @@ export function completeUpload(
     {
       method: "POST",
       auth: true,
-      body: { upload_id: uploadId, parts },
+      body: { parts },
     }
   );
 }
@@ -237,7 +236,7 @@ export async function uploadFile(
       signal
     );
     signal?.throwIfAborted();
-    await completeUpload(init.file_id, init.upload_id, parts);
+    await completeUpload(init.file_id, parts);
     return;
   }
 
