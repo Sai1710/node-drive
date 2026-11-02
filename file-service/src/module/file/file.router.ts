@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   COMPLETE_UPLOAD_ROUTE,
+  CREATE_FOLDER_ROUTE,
   GET_FILE_PREVIEW_ROUTE,
   GET_FILE_ROUTE,
   RENAME_FILE_ROUTE,
@@ -23,6 +24,12 @@ class FileRouter {
       UPLOAD_INITIALIZE_ROUTE,
       FileMiddleware.validateToken,
       fileController.initializeUpload
+    );
+
+    this.router.post(
+      CREATE_FOLDER_ROUTE,
+      FileMiddleware.validateToken,
+      fileController.createFolder
     );
     this.router.get(
       ROOT,

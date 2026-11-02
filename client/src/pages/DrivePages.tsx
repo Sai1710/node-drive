@@ -1,44 +1,171 @@
-import { Link, useSearchParams } from "react-router-dom";
-import { AlertCircle, Clock, FolderOpen, Loader2, RefreshCw, Search, Star, Trash2, Upload, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Clock,
+  FolderOpen,
+  FolderPlus,
+  Loader2,
+  RefreshCw,
+  Search,
+  Star,
+  Trash2,
+  Upload,
+  Users,
+} from "lucide-react";
+import { createFolder, deleteFile, getFileData, renameFile, ROOT_FOLDER_ID } from "../api/files";
+import { HttpError } from "../api/http";
 import FileBrowser from "../components/FileBrowser";
+import NameDialog from "../components/NameDialog";
 import { mockFiles } from "../data/mockFiles";
 import { useDriveContext } from "../files/driveContext";
+import type { DriveFile } from "../types";
+import NotFoundPage from "./NotFoundPage";
 
 export function MyDrivePage() {
+  const { folderId = ROOT_FOLDER_ID } = useParams();
+  // Reset dialogs and errors when moving between folders.
+  return <FolderView key={folderId} folderId={folderId} />;
+}
+
+type Dialog = { kind: "new-folder" } | { kind: "rename"; file: DriveFile } | null;
+
+function FolderView({ folderId }: { folderId: string }) {
   const { openUpload, fileList } = useDriveContext();
   const { files, loading, error, reload } = fileList;
+  const folder = useFolder(folderId);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  if (folder.notFound) return <NotFoundPage message="This folder does not exist or was removed." />;
+
+  const moveToTrash = async (file: DriveFile) => {
+    setActionError(null);
+    try {
+      await deleteFile(file._id);
+      reload();
+    } catch (err) {
+      setActionError(`Couldn't move “${file.file_name}” to trash: ${messageOf(err)}`);
+    }
+  };
 
   const empty =
     loading && files.length === 0
       ? { icon: <Loader2 size={48} className="spin" />, title: "Loading your files…", message: "Fetching from file-service." }
       : error && files.length === 0
         ? { icon: <AlertCircle size={64} />, title: "Couldn't load your files", message: error }
-        : { icon: <FolderOpen size={64} />, title: "Your Drive is empty", message: "Upload files to see them here." };
+        : folderId === ROOT_FOLDER_ID
+          ? { icon: <FolderOpen size={64} />, title: "Your Drive is empty", message: "Upload files or create a folder to see them here." }
+          : { icon: <FolderOpen size={64} />, title: "This folder is empty", message: "Upload files or create a folder here." };
+
+  const parentHref = folder.data?.parent_id ? `/drive/folders/${folder.data.parent_id}` : "/drive";
 
   return (
-    <FileBrowser
-      title="My Drive"
-      files={files}
-      actions={
-        <>
-          <button className="icon-btn" onClick={reload} disabled={loading} aria-label="Refresh files">
-            <RefreshCw size={18} className={loading ? "spin" : ""} />
-          </button>
-          <button className="btn btn-primary" onClick={openUpload}>
-            <Upload size={16} /> Upload
-          </button>
-        </>
-      }
-      banner={
-        error && files.length > 0 ? (
-          <div className="banner banner-error" role="alert">
-            Couldn't refresh your files: {error}
-          </div>
-        ) : undefined
-      }
-      empty={empty}
-    />
+    <>
+      <FileBrowser
+        title={folderId === ROOT_FOLDER_ID ? "My Drive" : (folder.data?.file_name ?? "Loading…")}
+        files={files}
+        onRename={(file) => setDialog({ kind: "rename", file })}
+        onDelete={moveToTrash}
+        actions={
+          <>
+            <button className="icon-btn" onClick={reload} disabled={loading} aria-label="Refresh files">
+              <RefreshCw size={18} className={loading ? "spin" : ""} />
+            </button>
+            <button className="btn" onClick={() => setDialog({ kind: "new-folder" })}>
+              <FolderPlus size={16} /> New folder
+            </button>
+            <button className="btn btn-primary" onClick={openUpload}>
+              <Upload size={16} /> Upload
+            </button>
+          </>
+        }
+        banner={
+          <>
+            {folderId !== ROOT_FOLDER_ID && (
+              <Link to={parentHref} className="folder-up">
+                <ArrowLeft size={16} /> Back
+              </Link>
+            )}
+            {folder.error && (
+              <div className="banner banner-error" role="alert">
+                Couldn't load this folder's details: {folder.error}
+              </div>
+            )}
+            {actionError && (
+              <div className="banner banner-error" role="alert">
+                {actionError}
+              </div>
+            )}
+            {error && files.length > 0 && (
+              <div className="banner banner-error" role="alert">
+                Couldn't refresh your files: {error}
+              </div>
+            )}
+          </>
+        }
+        empty={empty}
+      />
+
+      {dialog?.kind === "new-folder" && (
+        <NameDialog
+          title="New folder"
+          label="Folder name"
+          submitLabel="Create"
+          initialValue="Untitled folder"
+          onClose={() => setDialog(null)}
+          onSubmit={async (name) => {
+            await createFolder(name, folderId);
+            reload();
+          }}
+        />
+      )}
+      {dialog?.kind === "rename" && (
+        <NameDialog
+          title="Rename"
+          label="New name"
+          submitLabel="Rename"
+          initialValue={dialog.file.file_name}
+          onClose={() => setDialog(null)}
+          onSubmit={async (name) => {
+            await renameFile(dialog.file._id, name);
+            reload();
+          }}
+        />
+      )}
+    </>
   );
+}
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : "Something went wrong.");
+
+/** The open folder's own record, for its name and parent. Nothing to load at the root. */
+function useFolder(folderId: string) {
+  const [data, setData] = useState<DriveFile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    if (folderId === ROOT_FOLDER_ID) return;
+    let cancelled = false;
+    getFileData(folderId)
+      .then((file) => {
+        if (cancelled) return;
+        if (file.type === "folder") setData(file);
+        else setNotFound(true);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof HttpError && err.status === 404) setNotFound(true);
+        else setError(messageOf(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [folderId]);
+
+  return { data, error, notFound };
 }
 
 export function SharedPage() {

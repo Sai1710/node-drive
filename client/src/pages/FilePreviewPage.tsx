@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { AlertCircle, ArrowLeft, Download, Loader2, Share2, Star, Trash2 } from "lucide-react";
+import { deleteFile } from "../api/files";
 import FileIcon from "../components/FileIcon";
 import FileViewer from "../components/FileViewer";
 import { findFile } from "../data/mockFiles";
@@ -22,7 +23,10 @@ export default function FilePreviewPage() {
 
 function LivePreview({ id }: { id: string }) {
   const { fileList } = useDriveContext();
+  const navigate = useNavigate();
   const preview = useFilePreview(id);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // Show the row from the listing until the file data call returns.
   const file = preview.file ?? fileList.files.find((f) => f._id === id) ?? null;
 
@@ -75,12 +79,36 @@ function LivePreview({ id }: { id: string }) {
     );
   }
 
+  const folderHref = file.parent_id ? `/drive/folders/${file.parent_id}` : "/drive";
+
+  const moveToTrash = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteFile(file._id);
+      fileList.reload();
+      navigate(folderHref, { replace: true });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not move the file to trash.");
+      setDeleting(false);
+    }
+  };
+
   return (
     <PreviewLayout
       file={file}
       stage={stage}
+      backHref={folderHref}
+      onDelete={moveToTrash}
+      deleting={deleting}
       downloadUrl={preview.previewUrl}
-      detailsNote={preview.fileError && !preview.file ? `Showing cached details: ${preview.fileError}` : undefined}
+      detailsNote={
+        deleteError
+          ? `Couldn't move to trash: ${deleteError}`
+          : preview.fileError && !preview.file
+            ? `Showing cached details: ${preview.fileError}`
+            : undefined
+      }
     />
   );
 }
@@ -99,9 +127,14 @@ interface LayoutProps {
   stage: ReactNode;
   downloadUrl?: string | null;
   detailsNote?: string;
+  /** Where the back arrow goes; defaults to My Drive or Trash. */
+  backHref?: string;
+  /** Mock files have no handler, so the button does nothing for them. */
+  onDelete?: () => void;
+  deleting?: boolean;
 }
 
-function PreviewLayout({ file, stage, downloadUrl, detailsNote }: LayoutProps) {
+function PreviewLayout({ file, stage, downloadUrl, detailsNote, backHref, onDelete, deleting }: LayoutProps) {
   const details: [string, string][] = [
     ["Type", file.mime_type],
     ["Size", formatBytes(file.size)],
@@ -115,7 +148,7 @@ function PreviewLayout({ file, stage, downloadUrl, detailsNote }: LayoutProps) {
   return (
     <section className="preview">
       <header className="preview-header">
-        <Link to={file.is_trashed ? "/trash" : "/drive"} className="icon-btn" aria-label="Back">
+        <Link to={backHref ?? (file.is_trashed ? "/trash" : "/drive")} className="icon-btn" aria-label="Back">
           <ArrowLeft size={20} />
         </Link>
         <FileIcon mime={file.mime_type} size={24} />
@@ -127,8 +160,8 @@ function PreviewLayout({ file, stage, downloadUrl, detailsNote }: LayoutProps) {
           <button className="icon-btn" aria-label="Share">
             <Share2 size={20} />
           </button>
-          <button className="icon-btn" aria-label="Move to trash">
-            <Trash2 size={20} />
+          <button className="icon-btn" aria-label="Move to trash" onClick={onDelete} disabled={deleting}>
+            {deleting ? <Loader2 size={20} className="spin" /> : <Trash2 size={20} />}
           </button>
           {downloadUrl ? (
             // Cross-origin links ignore the download attribute, so this opens a new tab.

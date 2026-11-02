@@ -12,6 +12,7 @@ import {
   ApiResponse,
   asyncHandler,
   fileModel,
+  userModel,
 } from "@sakiriti/drive-common";
 import mongoose from "mongoose";
 import FileService from "./file.service";
@@ -25,7 +26,7 @@ class FileController {
 
   initializeUpload = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id;
-    const { file_name, mime_type, size } = req.body;
+    const { file_name, mime_type, size, parent_id } = req.body;
 
     if (!file_name || !size || !mime_type) {
       throw new ApiError(400, "Invalid request");
@@ -34,11 +35,27 @@ class FileController {
     const mbSize = size / 1_000_000;
     const isMultiPartUpload = mbSize > 10;
 
+    let parentFolder;
+    if (parent_id !== "root") {
+      parentFolder = await fileModel.findOne({
+        parent_id,
+        type: "folder",
+        user_id: userId,
+        is_trashed: false,
+      });
+
+      if (!parentFolder?._id) {
+        throw new ApiError(404, "No folder found");
+      }
+    }
+
     const createdFile = await fileModel.create({
       file_name,
       user_id: userId,
       size,
       mime_type,
+      parent_id,
+      ancestors: parentFolder?.ancestors?.concat(parent_id),
     });
 
     const uploadUrls = isMultiPartUpload
@@ -110,13 +127,60 @@ class FileController {
   getAllFiles = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id;
 
+    const { folder_id } = req.params;
+
     const userFiles = await fileModel
       .find({
         user_id: new mongoose.Types.ObjectId(userId),
+        parent_id: folder_id,
         is_trashed: false,
       })
       .sort({ createdAt: -1 });
+
     res.status(200).json(new ApiResponse(200, { files: userFiles }));
+  });
+
+  createFolder = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const { folder_name, parent_id } = req.body;
+
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    if (!folder_name) {
+      throw new ApiError(403, "Folder name is required");
+    }
+
+    const doesUserExist = await userModel.exists({ _id: userId });
+
+    if (!doesUserExist) {
+      throw new ApiError(403, "User doesn't exist");
+    }
+    let parentFolder;
+
+    if (parent_id !== "root") {
+      parentFolder = await fileModel.findOne({
+        parent_id,
+        type: "folder",
+        user_id: userId,
+        is_trashed: false,
+      });
+
+      if (!parentFolder?._id) {
+        throw new ApiError(404, "Folder doesnt exist");
+      }
+    }
+    await fileModel.create({
+      user_id: userId,
+      type: "folder",
+      parent_id,
+      ancestors: parentFolder?._id
+        ? parentFolder.ancestors?.concat(parentFolder._id)
+        : [],
+    });
+
+    res.status(201).json(new ApiResponse(201, {}, "Folder created"));
   });
 
   getFilePreview = asyncHandler(async (req: Request, res: Response) => {

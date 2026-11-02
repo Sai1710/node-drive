@@ -1,6 +1,9 @@
 // Mirrors the file model used by file-service (@sakiriti/drive-common).
 export interface DriveFile {
   _id: string;
+  /** Absent on mock files, which are all plain files. */
+  type?: "file" | "folder";
+  parent_id?: string | null;
   file_name: string;
   mime_type: string;
   size: number; // bytes

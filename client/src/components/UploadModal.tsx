@@ -17,12 +17,14 @@ interface UploadItem {
 let nextId = 0;
 
 interface Props {
+  /** Folder the files are uploaded into ("root" for the top of My Drive). */
+  parentId: string;
   onClose: () => void;
   /** Called after a batch in which at least one file uploaded. */
   onUploaded?: () => void;
 }
 
-export default function UploadModal({ onClose, onUploaded }: Props) {
+export default function UploadModal({ parentId, onClose, onUploaded }: Props) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [running, setRunning] = useState(false);
@@ -66,7 +68,7 @@ export default function UploadModal({ onClose, onUploaded }: Props) {
       if (controller.signal.aborted) break;
       update(item.id, { status: "uploading", progress: 0, error: undefined });
       try {
-        await uploadFile(item.file, (progress) => update(item.id, { progress }), controller.signal);
+        await uploadFile(item.file, parentId, (progress) => update(item.id, { progress }), controller.signal);
         update(item.id, { status: "done", progress: 100 });
         uploadedAny = true;
       } catch (err) {

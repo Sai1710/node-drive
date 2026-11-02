@@ -27,6 +27,7 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<DriveLayout />}>
               <Route path="/drive" element={<MyDrivePage />} />
+              <Route path="/drive/folders/:folderId" element={<MyDrivePage />} />
               <Route path="/shared" element={<SharedPage />} />
               <Route path="/recent" element={<RecentPage />} />
               <Route path="/starred" element={<StarredPage />} />

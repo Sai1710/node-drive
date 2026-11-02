@@ -521,6 +521,48 @@ input:focus {
   text-align: right;
 }
 
+.row-menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.row-menu {
+  position: absolute;
+  right: 0;
+  top: 40px;
+  z-index: 20;
+  min-width: 180px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 8px 0;
+  text-align: left;
+}
+
+.row-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.row-menu button:hover {
+  background: var(--hover);
+}
+
+.folder-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+
 .file-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

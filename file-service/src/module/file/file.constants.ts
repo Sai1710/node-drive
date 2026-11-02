@@ -6,3 +6,5 @@ export const GET_FILE_PREVIEW_ROUTE = "/preview/:id";
 export const ROOT = "/";
 export const COMPLETE_UPLOAD_ROUTE = "/upload/complete/:file_id";
 export const RENAME_FILE_ROUTE = "/rename/:id";
+export const CREATE_FOLDER_ROUTE = "/create-folder";
+export const GET_FILES_ROUTE = "/file/:folder_id";

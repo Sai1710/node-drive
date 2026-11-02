@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useMatch, useNavigate } from "react-router-dom";
 import {
   Clock,
   Cloud,
@@ -18,6 +18,7 @@ import { mockUser } from "../data/mockFiles";
 import { useAuth } from "../auth/useAuth";
 import { useFileList } from "../files/useFileList";
 import type { DriveContext } from "../files/driveContext";
+import { ROOT_FOLDER_ID } from "../api/files";
 import { formatBytes } from "../utils";
 
 const nav = [
@@ -32,8 +33,10 @@ export default function DriveLayout() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Fetched once the drive opens after sign-in, then after each upload.
-  const fileList = useFileList();
+  // The open folder in My Drive; uploads land here. Other pages use the root.
+  const folderId = useMatch("/drive/folders/:folderId")?.params.folderId ?? ROOT_FOLDER_ID;
+  // Fetched when the drive opens or the folder changes, then after each change.
+  const fileList = useFileList(folderId);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const email = user?.email ?? "";
@@ -133,7 +136,7 @@ export default function DriveLayout() {
         </main>
       </div>
 
-      {uploadOpen && <UploadModal onClose={() => setUploadOpen(false)} onUploaded={fileList.reload} />}
+      {uploadOpen && <UploadModal parentId={folderId} onClose={() => setUploadOpen(false)} onUploaded={fileList.reload} />}
     </div>
   );
 }

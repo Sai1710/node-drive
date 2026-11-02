@@ -5,11 +5,15 @@ import { HttpError, request } from "./http";
 export const contentTypeOf = (file: File) =>
   file.type || "application/octet-stream";
 
+/** The folder id file-service uses for the top level of My Drive. */
+export const ROOT_FOLDER_ID = "root";
+
 /** A file document as file-service returns it (fileSchema in drive-common). */
 export interface ServerFile {
   _id: string;
   user_id: string;
   parent_id: string | null;
+  ancestors?: string[];
   file_name: string;
   type: "file" | "folder";
   mime_type: string | null;
@@ -24,6 +28,8 @@ export interface ServerFile {
 // The backend has no starring or sharing yet, so those fields get defaults.
 const toDriveFile = (f: ServerFile): DriveFile => ({
   _id: f._id,
+  type: f.type,
+  parent_id: f.parent_id,
   file_name: f.file_name,
   mime_type: f.mime_type || "application/octet-stream",
   size: f.size ?? 0,
@@ -36,12 +42,47 @@ const toDriveFile = (f: ServerFile): DriveFile => ({
   updatedAt: f.updatedAt,
 });
 
-/** The signed-in user's files that are not in the trash, newest first. */
-export async function listFiles(): Promise<DriveFile[]> {
-  const data = await request<{ files: ServerFile[] }>(`${FILE_API_URL}/file`, {
+/** Files and folders in one folder that are not in the trash, newest first. */
+export async function listFiles(
+  folderId: string = ROOT_FOLDER_ID
+): Promise<DriveFile[]> {
+  const data = await request<{ files: ServerFile[] }>(
+    `${FILE_API_URL}/file?folder_id=${encodeURIComponent(folderId)}`,
+    { auth: true }
+  );
+  return (data?.files ?? []).map(toDriveFile);
+}
+
+/** Creates an empty folder (POST /file/create-folder). */
+export function createFolder(
+  folderName: string,
+  parentId: string = ROOT_FOLDER_ID
+) {
+  return request<unknown>(`${FILE_API_URL}/file/create-folder`, {
+    method: "POST",
+    auth: true,
+    body: { folder_name: folderName, parent_id: parentId },
+  });
+}
+
+/** Renames a file or folder (PUT /file/rename/:id). */
+export function renameFile(id: string, fileName: string) {
+  return request<unknown>(
+    `${FILE_API_URL}/file/rename/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      auth: true,
+      body: { file_name: fileName },
+    }
+  );
+}
+
+/** Moves a file or folder to the trash (DELETE /file/:id). */
+export function deleteFile(id: string) {
+  return request<unknown>(`${FILE_API_URL}/file/${encodeURIComponent(id)}`, {
+    method: "DELETE",
     auth: true,
   });
-  return (data?.files ?? []).map(toDriveFile);
 }
 
 /** One file's record (GET /file/:id). */
@@ -96,7 +137,10 @@ export function completeUpload(
 }
 
 /** Creates the file record and returns presigned S3 upload URL(s). */
-export function initializeUpload(file: File) {
+export function initializeUpload(
+  file: File,
+  parentId: string = ROOT_FOLDER_ID
+) {
   return request<InitializeUploadData>(
     `${FILE_API_URL}/file/upload/initialize`,
     {
@@ -106,6 +150,7 @@ export function initializeUpload(file: File) {
         file_name: file.name,
         mime_type: contentTypeOf(file),
         size: file.size,
+        parent_id: parentId,
       },
     }
   );
@@ -219,10 +264,11 @@ async function uploadMultipartToS3(
 
 export async function uploadFile(
   file: File,
+  parentId: string,
   onProgress: (percent: number) => void,
   signal?: AbortSignal
 ) {
-  const init = await initializeUpload(file);
+  const init = await initializeUpload(file, parentId);
   signal?.throwIfAborted();
 
   if (init.upload_type === "MULTI") {
