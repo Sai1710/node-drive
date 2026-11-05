@@ -1,0 +1,49 @@
+my-service/
+├── src/
+│   ├── app.ts                  # Builds the app (middleware, routes); no listen()
+│   ├── server.ts               # Entry point: starts HTTP server, graceful shutdown
+│   │
+│   ├── config/                 # Typed, validated env config (zod/joi)
+│   │   ├── index.ts
+│   │   └── env.schema.ts
+│   │
+│   ├── modules/                # Feature-based: one folder per domain
+│   │   ├── file/
+│   │   │   ├── file.controller.ts   # HTTP layer: parse req, call service, send res
+│   │   │   ├── file.service.ts      # Business logic (no req/res here)
+│   │   │   ├── file.repository.ts   # DB access only
+│   │   │   ├── file.routes.ts
+│   │   │   ├── file.validator.ts    # Request schemas
+│   │   │   ├── file.types.ts
+│   │   │   └── __tests__/
+│   │   └── user/ ...
+│   │
+│   ├── database/
+│   │   ├── connection.ts
+│   │   ├── schemas/ (or models/)
+│   │   ├── migrations/
+│   │   └── seeds/
+│   │
+│   ├── middlewares/            # auth, error handler, rate limit, request-id
+│   ├── integrations/           # External clients: S3, payment providers, queues
+│   ├── jobs/                   # Cron jobs, queue workers/consumers
+│   ├── events/                 # Event emitters/subscribers
+│   ├── utils/                  # Pure, generic helpers
+│   ├── constants/              # Enums, fixed values
+│   ├── errors/                 # Custom error classes (AppError, NotFoundError)
+│   ├── logger/                 # pino/winston setup
+│   └── types/                  # Global/shared TS types, express augmentation
+│
+├── tests/
+│   ├── integration/
+│   ├── e2e/
+│   └── fixtures/
+├── scripts/                    # One-off ops/maintenance scripts
+├── docs/                       # API docs (OpenAPI), ADRs
+├── .github/workflows/          # CI/CD
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example                # Never commit real .env
+├── .eslintrc / .prettierrc
+├── tsconfig.json
+└── package.json

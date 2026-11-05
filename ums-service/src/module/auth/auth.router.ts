@@ -4,7 +4,7 @@ import {
   LOGOUT_ROUTE,
   REFRESH_SESSION_ROUTE,
   SIGNUP_ROUTE,
-} from "./auth.constants";
+} from "./auth.endpoints";
 import authControllers from "./auth.controllers";
 import authMiddleware from "./auth.middleware";
 
@@ -23,7 +23,7 @@ class AuthRouter {
     this.router.post(
       LOGOUT_ROUTE,
       authMiddleware.validateToken,
-      authControllers.logout,
+      authControllers.logout
     );
   }
 }

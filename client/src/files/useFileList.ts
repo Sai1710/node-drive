@@ -3,8 +3,8 @@ import { listFiles } from "../api/files";
 import type { DriveFile } from "../types";
 
 export interface FileListState {
-  /** The folder these files belong to ("root" for the top of My Drive). */
-  folderId: string;
+  /** The folder these files belong to (null for the top of My Drive). */
+  folderId: string | null;
   files: DriveFile[];
   loading: boolean;
   error: string | null;
@@ -13,16 +13,16 @@ export interface FileListState {
 
 interface Loaded {
   key: string;
-  folderId: string;
+  folderId: string | null;
   files: DriveFile[];
   error: string | null;
 }
 
 /** Loads one folder's files, again when the folder changes, and whenever `reload` is called. */
-export function useFileList(folderId: string): FileListState {
+export function useFileList(folderId: string | null): FileListState {
   const [version, setVersion] = useState(0);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const key = `${folderId}:${version}`;
+  const key = `${folderId ?? "root"}:${version}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +42,7 @@ export function useFileList(folderId: string): FileListState {
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   // Rows from another folder are never shown while the new one loads.
-  const sameFolder = loaded?.folderId === folderId;
+  const sameFolder = loaded !== null && loaded.folderId === folderId;
   return {
     folderId,
     files: sameFolder ? loaded.files : [],

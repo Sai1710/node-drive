@@ -17,8 +17,8 @@ interface UploadItem {
 let nextId = 0;
 
 interface Props {
-  /** Folder the files are uploaded into ("root" for the top of My Drive). */
-  parentId: string;
+  /** Folder the files are uploaded into (null for the top of My Drive). */
+  parentId: string | null;
   onClose: () => void;
   /** Called after a batch in which at least one file uploaded. */
   onUploaded?: () => void;

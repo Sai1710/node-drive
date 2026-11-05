@@ -15,10 +15,10 @@ class App {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cors());
-    this.app.use(errorHandler);
 
     this.app.use(indexRouter);
+    this.app.use(errorHandler);
   }
 }
 
-export default new App();
+export default App;

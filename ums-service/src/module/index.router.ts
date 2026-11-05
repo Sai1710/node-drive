@@ -1,6 +1,6 @@
 import { Router } from "express";
 import authRoutes from "./auth/auth.router";
-import { AUTH_ROUTE } from "./auth/auth.constants";
+import { AUTH_ROUTE } from "./auth/auth.endpoints";
 
 class IndexRouter {
   router: Router;

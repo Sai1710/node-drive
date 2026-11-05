@@ -12,9 +12,11 @@ import {
   ApiResponse,
   asyncHandler,
   fileModel,
+  TFile,
+  TFileDocument,
   userModel,
 } from "@sakiriti/drive-common";
-import mongoose from "mongoose";
+import mongoose, { QueryFilter } from "mongoose";
 import FileService from "./file.service";
 
 class FileController {
@@ -36,9 +38,9 @@ class FileController {
     const isMultiPartUpload = mbSize > 10;
 
     let parentFolder;
-    if (parent_id !== "root") {
+    if (parent_id) {
       parentFolder = await fileModel.findOne({
-        parent_id,
+        _id: parent_id,
         type: "folder",
         user_id: userId,
         is_trashed: false,
@@ -55,7 +57,9 @@ class FileController {
       size,
       mime_type,
       parent_id,
-      ancestors: parentFolder?.ancestors?.concat(parent_id),
+      ancestors: parentFolder?._id
+        ? parentFolder?.ancestors?.concat(parent_id)
+        : null,
     });
 
     const uploadUrls = isMultiPartUpload
@@ -127,15 +131,17 @@ class FileController {
   getAllFiles = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id;
 
-    const { folder_id } = req.params;
+    const { folder_id } = req.query;
 
-    const userFiles = await fileModel
-      .find({
-        user_id: new mongoose.Types.ObjectId(userId),
-        parent_id: folder_id,
-        is_trashed: false,
-      })
-      .sort({ createdAt: -1 });
+    const queryFilter: QueryFilter<TFile> = folder_id
+      ? {
+          user_id: userId,
+          is_trashed: false,
+          parent_id: folder_id,
+        }
+      : { user_id: userId, is_trashed: false };
+
+    const userFiles = await fileModel.find(queryFilter).sort({ createdAt: -1 });
 
     res.status(200).json(new ApiResponse(200, { files: userFiles }));
   });
@@ -159,9 +165,9 @@ class FileController {
     }
     let parentFolder;
 
-    if (parent_id !== "root") {
+    if (parent_id) {
       parentFolder = await fileModel.findOne({
-        parent_id,
+        _id: parent_id,
         type: "folder",
         user_id: userId,
         is_trashed: false,
@@ -174,6 +180,7 @@ class FileController {
     await fileModel.create({
       user_id: userId,
       type: "folder",
+      file_name: folder_name,
       parent_id,
       ancestors: parentFolder?._id
         ? parentFolder.ancestors?.concat(parentFolder._id)
@@ -184,7 +191,19 @@ class FileController {
   });
 
   getFilePreview = asyncHandler(async (req: Request, res: Response) => {
-    const s3Key = req.params?.id.toString();
+    const userId = req.user?._id;
+    const fileId = req.params.id;
+
+    const dbFile = await fileModel.findOne({
+      _id: fileId,
+      user_id: userId,
+    });
+
+    if (!dbFile?._id || !dbFile.s3_key || dbFile.status !== "uploaded") {
+      throw new ApiError(404, "File doesnt exisy");
+    }
+
+    const s3Key = dbFile.s3_key?.toString();
     const getCommand = new GetObjectCommand({
       Bucket: AWS_BUCKET,
       Key: s3Key,
@@ -195,30 +214,56 @@ class FileController {
   });
 
   getFileData = asyncHandler(async (req: Request, res: Response) => {
-    const fileId = req.params?.id.toString();
-    const fileData = await fileModel.findById(fileId);
-    if (!fileData?._id) {
-      throw new ApiError(404, "No file found");
+    const userId = req.user?._id;
+    const fileId = req.params.id;
+
+    const dbFile = await fileModel.findOne({
+      _id: fileId,
+      user_id: userId,
+    });
+
+    if (!dbFile?._id || !dbFile.s3_key || dbFile.status !== "uploaded") {
+      throw new ApiError(404, "File doesnt exisy");
     }
-    res.status(200).json(new ApiResponse(200, fileData, "File data fetched"));
+
+    res.status(200).json(new ApiResponse(200, dbFile, "File data fetched"));
   });
 
   renameFile = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const fileId = req.params.id;
     const { file_name } = req.body;
-    const { id } = req.params;
 
-    await fileModel.findByIdAndUpdate(id, {
-      file_name,
+    const dbFile = await fileModel.findOne({
+      _id: fileId,
+      user_id: userId,
     });
+
+    if (!dbFile?._id || !dbFile.s3_key || dbFile.status !== "uploaded") {
+      throw new ApiError(404, "File doesnt exisy");
+    }
+
+    dbFile.file_name = file_name;
+    await dbFile.save();
 
     res.status(200).json(new ApiResponse(200, {}, "Filename updated"));
   });
 
   deleteFile = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    await fileModel.findByIdAndUpdate(id, {
-      is_trashed: true,
+    const userId = req.user?._id;
+    const fileId = req.params.id;
+
+    const dbFile = await fileModel.findOne({
+      _id: fileId,
+      user_id: userId,
     });
+
+    if (!dbFile?._id || !dbFile.s3_key || dbFile.status !== "uploaded") {
+      throw new ApiError(404, "File doesnt exisy");
+    }
+
+    dbFile.is_trashed = true;
+    await dbFile.save();
 
     res.status(200).json(new ApiResponse(200, {}, "File deleted successfully"));
   });

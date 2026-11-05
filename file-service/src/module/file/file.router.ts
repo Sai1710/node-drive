@@ -20,6 +20,11 @@ class FileRouter {
   }
 
   private setupRoutes() {
+    this.router.get(
+      ROOT,
+      FileMiddleware.validateToken,
+      fileController.getAllFiles
+    );
     this.router.post(
       UPLOAD_INITIALIZE_ROUTE,
       FileMiddleware.validateToken,
@@ -30,11 +35,6 @@ class FileRouter {
       CREATE_FOLDER_ROUTE,
       FileMiddleware.validateToken,
       fileController.createFolder
-    );
-    this.router.get(
-      ROOT,
-      FileMiddleware.validateToken,
-      fileController.getAllFiles
     );
     this.router.post(
       COMPLETE_UPLOAD_ROUTE,

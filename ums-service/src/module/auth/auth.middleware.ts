@@ -2,7 +2,9 @@ import { NextFunction, Request, Response } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
 import { ACCESS_TOKEN_SECRET } from "../../config/env.configuration";
-import { ApiError, asyncHandler, TUserDocument } from "@sakiriti/drive-common";
+import { ApiError } from "../../utils/apiError";
+import { asyncHandler } from "../../utils/asyncHandler";
+import { TUserDocument } from "../../types/user";
 
 class AuthMiddleware {
   validateToken = asyncHandler(

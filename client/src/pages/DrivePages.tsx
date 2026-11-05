@@ -14,7 +14,7 @@ import {
   Upload,
   Users,
 } from "lucide-react";
-import { createFolder, deleteFile, getFileData, renameFile, ROOT_FOLDER_ID } from "../api/files";
+import { createFolder, deleteFile, getFileData, renameFile } from "../api/files";
 import { HttpError } from "../api/http";
 import FileBrowser from "../components/FileBrowser";
 import NameDialog from "../components/NameDialog";
@@ -24,14 +24,15 @@ import type { DriveFile } from "../types";
 import NotFoundPage from "./NotFoundPage";
 
 export function MyDrivePage() {
-  const { folderId = ROOT_FOLDER_ID } = useParams();
+  const { folderId = null } = useParams();
   // Reset dialogs and errors when moving between folders.
-  return <FolderView key={folderId} folderId={folderId} />;
+  return <FolderView key={folderId ?? "root"} folderId={folderId} />;
 }
 
 type Dialog = { kind: "new-folder" } | { kind: "rename"; file: DriveFile } | null;
 
-function FolderView({ folderId }: { folderId: string }) {
+/** One folder of My Drive; `folderId` is null at the top level. */
+function FolderView({ folderId }: { folderId: string | null }) {
   const { openUpload, fileList } = useDriveContext();
   const { files, loading, error, reload } = fileList;
   const folder = useFolder(folderId);
@@ -55,7 +56,7 @@ function FolderView({ folderId }: { folderId: string }) {
       ? { icon: <Loader2 size={48} className="spin" />, title: "Loading your files…", message: "Fetching from file-service." }
       : error && files.length === 0
         ? { icon: <AlertCircle size={64} />, title: "Couldn't load your files", message: error }
-        : folderId === ROOT_FOLDER_ID
+        : folderId === null
           ? { icon: <FolderOpen size={64} />, title: "Your Drive is empty", message: "Upload files or create a folder to see them here." }
           : { icon: <FolderOpen size={64} />, title: "This folder is empty", message: "Upload files or create a folder here." };
 
@@ -64,7 +65,7 @@ function FolderView({ folderId }: { folderId: string }) {
   return (
     <>
       <FileBrowser
-        title={folderId === ROOT_FOLDER_ID ? "My Drive" : (folder.data?.file_name ?? "Loading…")}
+        title={folderId === null ? "My Drive" : (folder.data?.file_name ?? "Loading…")}
         files={files}
         onRename={(file) => setDialog({ kind: "rename", file })}
         onDelete={moveToTrash}
@@ -83,7 +84,7 @@ function FolderView({ folderId }: { folderId: string }) {
         }
         banner={
           <>
-            {folderId !== ROOT_FOLDER_ID && (
+            {folderId !== null && (
               <Link to={parentHref} className="folder-up">
                 <ArrowLeft size={16} /> Back
               </Link>
@@ -141,13 +142,13 @@ function FolderView({ folderId }: { folderId: string }) {
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : "Something went wrong.");
 
 /** The open folder's own record, for its name and parent. Nothing to load at the root. */
-function useFolder(folderId: string) {
+function useFolder(folderId: string | null) {
   const [data, setData] = useState<DriveFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    if (folderId === ROOT_FOLDER_ID) return;
+    if (folderId === null) return;
     let cancelled = false;
     getFileData(folderId)
       .then((file) => {

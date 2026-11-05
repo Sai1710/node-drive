@@ -5,9 +5,6 @@ import { HttpError, request } from "./http";
 export const contentTypeOf = (file: File) =>
   file.type || "application/octet-stream";
 
-/** The folder id file-service uses for the top level of My Drive. */
-export const ROOT_FOLDER_ID = "root";
-
 /** A file document as file-service returns it (fileSchema in drive-common). */
 export interface ServerFile {
   _id: string;
@@ -42,12 +39,16 @@ const toDriveFile = (f: ServerFile): DriveFile => ({
   updatedAt: f.updatedAt,
 });
 
-/** Files and folders in one folder that are not in the trash, newest first. */
+/**
+ * Files and folders in one folder that are not in the trash, newest first.
+ * `null` is the top level of My Drive (GET /file/folder), otherwise GET /file/folder/:folder_id.
+ */
 export async function listFiles(
-  folderId: string = ROOT_FOLDER_ID
+  folderId: string | null = null
 ): Promise<DriveFile[]> {
+  const path = folderId ? `/${encodeURIComponent(folderId)}` : "";
   const data = await request<{ files: ServerFile[] }>(
-    `${FILE_API_URL}/file?folder_id=${encodeURIComponent(folderId)}`,
+    `${FILE_API_URL}/file/folder${path}`,
     { auth: true }
   );
   return (data?.files ?? []).map(toDriveFile);
@@ -56,7 +57,7 @@ export async function listFiles(
 /** Creates an empty folder (POST /file/create-folder). */
 export function createFolder(
   folderName: string,
-  parentId: string = ROOT_FOLDER_ID
+  parentId: string | null = null
 ) {
   return request<unknown>(`${FILE_API_URL}/file/create-folder`, {
     method: "POST",
@@ -139,7 +140,7 @@ export function completeUpload(
 /** Creates the file record and returns presigned S3 upload URL(s). */
 export function initializeUpload(
   file: File,
-  parentId: string = ROOT_FOLDER_ID
+  parentId: string | null = null
 ) {
   return request<InitializeUploadData>(
     `${FILE_API_URL}/file/upload/initialize`,
@@ -264,7 +265,7 @@ async function uploadMultipartToS3(
 
 export async function uploadFile(
   file: File,
-  parentId: string,
+  parentId: string | null,
   onProgress: (percent: number) => void,
   signal?: AbortSignal
 ) {
